@@ -58,7 +58,7 @@ class DBMigrator():
                      none-zero values.
               build: sequentially increase within a minor version domain.
         """
-        self.CURRENT_VERSION = 'version_202505_01'
+        self.CURRENT_VERSION = 'version_202511_01'
 
         self.TABLE_NAME      = 'VERSIONS'
         self.TABLE_KEY       = 'DATABASE'
@@ -935,6 +935,27 @@ class DBMigrator():
             except Exception as e:
                 log.log_error(f"Failed to migrate DHCP servers for {vlan_key}: {str(e)}")
 
+    def migrate_ipinip_tunnel_ecn_mode_mellanox(self):
+        """
+        Migrate IPINIP_TUNNEL ecn mode to copy_from_outer.
+
+        Prior to 202505, on Mellanox platform, the ecn mode of IPINIP tunnel was set to standard.
+        """
+
+        table_name = 'TUNNEL_DECAP_TABLE'
+        keys_to_migrate = [
+            'IPINIP_SUBNET',
+            'IPINIP_TUNNEL',
+            'IPINIP_SUBNET_V6',
+            'IPINIP_V6_TUNNEL'
+        ]
+
+        table = self.appDB.get_table(table_name)
+        for k, v in table.items():
+            if k in keys_to_migrate:
+                log.log_info(f"Migrating {k}, ecn mode: {v.get('ecn_mode')} -> copy_from_outer")
+                v['ecn_mode'] = 'copy_from_outer'
+                self.appDB.set_entry(table_name, k, v)
 
     def version_unknown(self):
         """
@@ -1389,6 +1410,17 @@ class DBMigrator():
             self.migrate_dhcp_servers_to_dhcpv4_relay()
 
         self.migrate_flex_counter_delay_status_removal()
+        self.set_version('version_202511_01')
+        return 'version_202511_01'
+
+    def version_202511_01(self):
+        """
+        Version 202511_01.
+        """
+        log.log_info('Handling version_202511_01')
+
+        if self.asic_type == "mellanox":
+            self.migrate_ipinip_tunnel_ecn_mode_mellanox()
         return None
 
     def get_version(self):
